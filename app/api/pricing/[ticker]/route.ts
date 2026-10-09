@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchStooqForTicker } from "@/lib/providers";
+import { fetchPriceForTicker } from "@/lib/providers";
 import { guardExpensiveRequest } from "@/lib/request-guard";
 import { parseTickerIdentifier } from "@/lib/screen-request";
 
@@ -29,7 +29,7 @@ export async function GET(
     );
   }
   try {
-    return NextResponse.json(await fetchStooqForTicker(ticker));
+    return NextResponse.json(await fetchPriceForTicker(ticker));
   } catch (error) {
     return NextResponse.json(
       {

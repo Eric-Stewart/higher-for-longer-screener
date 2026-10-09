@@ -146,7 +146,9 @@ export function Dashboard() {
       return;
     }
     setLoading(true);
-    setStatus(`Requesting ${tickers.length} tickers from SEC and Stooq…`);
+    setStatus(
+      `Requesting ${tickers.length} tickers from SEC and price providers…`,
+    );
     try {
       const response = await fetch("/api/screen", {
         method: "POST",

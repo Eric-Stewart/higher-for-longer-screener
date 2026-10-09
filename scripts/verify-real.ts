@@ -51,7 +51,7 @@ async function main() {
         ? record.netIncome.reason || "No usable SEC fundamentals"
         : record.avgDollarVolume.reason ||
           record.latestClose?.reason ||
-          "No complete Stooq price record";
+          "No complete price record";
       reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
     }
   });

@@ -1,6 +1,6 @@
 # Higher-for-Longer Small-Cap Screener
 
-An evidence-first Next.js dashboard for finding liquid, profitable, conservatively financed small caps. It runs offline with 28 clearly labeled synthetic companies and can screen supplied tickers using reported SEC Company Facts plus Stooq daily prices. It never asks an LLM to generate financial values.
+An evidence-first Next.js dashboard for finding liquid, profitable, conservatively financed small caps. It runs offline with 28 clearly labeled synthetic companies and can screen supplied tickers using reported SEC Company Facts plus daily market prices (Yahoo Finance primary, Stooq fallback). It never asks an LLM to generate financial values.
 
 > Research software, not investment advice. XBRL tagging varies by issuer; inspect linked source filings before making a decision.
 
@@ -28,8 +28,8 @@ npm start
 
 - **Universe:** official iShares IWM holdings CSV, refreshed through `GET /api/universe` and cached for 24 hours. The response includes `count`, companies, source URL, and upstream last-modified value when supplied.
 - **Fundamentals:** SEC `company_tickers.json` maps ticker to CIK; SEC Company Facts supplies reported XBRL facts. Set a descriptive `SEC_USER_AGENT`. Source: `https://data.sec.gov/api/xbrl/companyfacts/`.
-- **Price/liquidity:** Stooq daily CSV. The latest valid close and mean of `close × volume` across the latest 20 valid sessions are used. Source: `https://stooq.com/`.
-- **Market cap:** latest SEC-reported shares outstanding × latest Stooq close. It remains N/A when either input is missing.
+- **Price/liquidity:** Yahoo Finance daily chart API first (`interval=1d&range=3mo`, split/dividend-adjusted closes when Yahoo provides an `adjclose` series), Stooq daily CSV on failure. The latest valid close and mean of `close × volume` across the latest 20 valid sessions are used. Sources: `https://query1.finance.yahoo.com/`, `https://query2.finance.yahoo.com/`, `https://stooq.com/`.
+- **Market cap:** latest SEC-reported shares outstanding × latest price close. It remains N/A when either input is missing.
 - **Sample mode:** 28 fictitious, realistic synthetic records in `data/sample.ts`; every metric says `SYNTHETIC — NOT REPORTED` and uses a `sample://` source.
 
 All external fetches run on the server. Each displayed metric carries a source URL and as-of date; SEC-derived metrics also carry form/filed metadata. Missing data remains visible with a reason and receives zero points.
@@ -78,6 +78,6 @@ The detail drawer includes a qualitative checklist, notes, and a field for a pas
 ## Deployment placeholders
 
 - Repository: `https://github.com/Eric-Stewart/higher-for-longer-screener`
-- Production: `https://YOUR_PROJECT.vercel.app`
+- Production: `https://higher-for-longer-screener.vercel.app`
 
 No repository or deployment is created by this project bootstrap.

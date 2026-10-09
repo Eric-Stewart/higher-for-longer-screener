@@ -1,6 +1,7 @@
 import { normalizeTicker } from "./csv";
 import { extractSecMetrics, type CompanyFacts } from "./sec";
 import { parseStooqDaily } from "./stooq";
+import { parseYahooChart } from "./yahoo";
 import type { CompanyMetrics, Metric } from "./types";
 
 const SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json";
@@ -99,9 +100,68 @@ export async function fetchStooqForTicker(ticker: string) {
     return {
       ticker: normalized,
       sourceUrl,
+      provider: "stooq" as const,
       ...parseStooqDaily(await response.text(), sourceUrl),
     };
   });
+}
+
+const YAHOO_HOSTS = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"];
+const YAHOO_UA = "Mozilla/5.0 (X11; Linux x86_64)";
+
+export async function fetchYahooForTicker(ticker: string) {
+  const normalized = normalizeTicker(ticker);
+  // Dots are exchange suffixes Yahoo does not use (e.g. BRK.B -> BRK-B).
+  const symbol = encodeURIComponent(normalized.replace(/\./g, "-"));
+  return cached(`yahoo:${normalized}`, 900_000, async () => {
+    const errors: string[] = [];
+    for (const host of YAHOO_HOSTS) {
+      const sourceUrl = `https://${host}/v8/finance/chart/${symbol}?interval=1d&range=3mo`;
+      try {
+        const response = await checkedFetch(
+          sourceUrl,
+          {
+            headers: { "User-Agent": YAHOO_UA },
+            next: { revalidate: 900 },
+          },
+          10_000,
+        );
+        const parsed = parseYahooChart(await response.json(), sourceUrl);
+        if (
+          parsed.latestClose.value === null &&
+          parsed.avgDollarVolume.value === null
+        ) {
+          throw new Error(
+            parsed.latestClose.reason ?? "No usable Yahoo price rows",
+          );
+        }
+        return {
+          ticker: normalized,
+          sourceUrl,
+          provider: "yahoo" as const,
+          ...parsed,
+        };
+      } catch (error) {
+        errors.push(`${host}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    throw new Error(`Yahoo chart API failed (${errors.join("; ")})`);
+  });
+}
+
+export async function fetchPriceForTicker(ticker: string) {
+  const normalized = normalizeTicker(ticker);
+  try {
+    return await fetchYahooForTicker(normalized);
+  } catch (yahooError) {
+    try {
+      return await fetchStooqForTicker(normalized);
+    } catch (stooqError) {
+      throw new Error(
+        `Price unavailable (Yahoo: ${yahooError instanceof Error ? yahooError.message : String(yahooError)}; Stooq: ${stooqError instanceof Error ? stooqError.message : String(stooqError)})`,
+      );
+    }
+  }
 }
 
 const unavailable = (sourceUrl: string, reason: string): Metric => ({
@@ -118,17 +178,19 @@ export async function screenTicker(
   const normalized = normalizeTicker(ticker);
   const [secResult, priceResult] = await Promise.allSettled([
     fetchSecForTicker(normalized),
-    fetchStooqForTicker(normalized),
+    fetchPriceForTicker(normalized),
   ]);
   if (secResult.status === "rejected" && priceResult.status === "rejected") {
     throw new Error(
-      `SEC: ${String(secResult.reason)}; Stooq: ${String(priceResult.reason)}`,
+      `SEC: ${String(secResult.reason)}; Price: ${String(priceResult.reason)}`,
     );
   }
   const sec = secResult.status === "fulfilled" ? secResult.value : null;
   const price = priceResult.status === "fulfilled" ? priceResult.value : null;
   const secUrl = sec?.sourceUrl ?? SEC_TICKERS_URL;
-  const priceUrl = price?.sourceUrl ?? "https://stooq.com";
+  const priceUrl = price?.sourceUrl ?? "https://query1.finance.yahoo.com";
+  const priceLabel =
+    price?.provider === "yahoo" ? "Yahoo close" : "Stooq close";
   const secMissing = (key: string) =>
     unavailable(
       secUrl,
@@ -141,7 +203,7 @@ export async function screenTicker(
     unavailable(
       priceUrl,
       priceResult.status === "rejected"
-        ? `Stooq unavailable: ${String(priceResult.reason)}`
+        ? `Price unavailable: ${String(priceResult.reason)}`
         : "Price unavailable",
     );
   const shares = sec?.metrics.sharesOutstanding;
@@ -152,7 +214,7 @@ export async function screenTicker(
           sourceUrl: secUrl,
           sources: [
             { label: "SEC shares", url: secUrl, asOf: shares.asOf },
-            { label: "Stooq close", url: priceUrl, asOf: latestClose.asOf },
+            { label: priceLabel, url: priceUrl, asOf: latestClose.asOf },
           ],
           asOf:
             [shares.asOf, latestClose.asOf]
@@ -164,11 +226,11 @@ export async function screenTicker(
       : {
           ...unavailable(
             secUrl,
-            `Market cap requires ${shares?.value == null ? "reported shares outstanding" : "a latest Stooq close"}`,
+            `Market cap requires ${shares?.value == null ? "reported shares outstanding" : "a latest price close"}`,
           ),
           sources: [
             { label: "SEC shares", url: secUrl, asOf: shares?.asOf ?? null },
-            { label: "Stooq close", url: priceUrl, asOf: latestClose.asOf },
+            { label: priceLabel, url: priceUrl, asOf: latestClose.asOf },
           ],
         };
   return {
@@ -190,7 +252,7 @@ export async function screenTicker(
       unavailable(
         priceUrl,
         priceResult.status === "rejected"
-          ? `Stooq unavailable: ${String(priceResult.reason)}`
+          ? `Price unavailable: ${String(priceResult.reason)}`
           : "20-session liquidity unavailable",
       ),
     latestClose,

@@ -11,7 +11,7 @@ npm run dev
 ```
 
 ## Rules
-- Write or update a failing Vitest test before changing scoring, CSV, SEC, Stooq, or export transforms.
+- Write or update a failing Vitest test before changing scoring, CSV, SEC, price-provider (Yahoo/Stooq), or export transforms.
 - Keep external requests inside server routes or server-only provider modules. Never add paid APIs, API keys, a database, or generated financial values.
 - Preserve `Metric` provenance (`sourceUrl`, `asOf`, `form`/`filed`, and explicit `reason` for `null`). Missing values receive zero points and are never removed or score-renormalized.
 - Keep `/api/screen` bounded to 50 tickers and concurrency 3 or lower. SEC requests require `SEC_USER_AGENT` in real use.
